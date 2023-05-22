@@ -13,9 +13,10 @@ import java.util.UUID
 
 class MainActivity : AppCompatActivity() {
 
-    private val bluetoothAdapter: BluetoothAdapter? by lazy { BluetoothAdapter.getDefaultAdapter() }
+private val bluetoothAdapter: BluetoothAdapter? by lazy { BluetoothAdapter.getDefaultAdapter() }
     private lateinit var textView: TextView
     private lateinit var bluetoothGatt: BluetoothGatt
+    private val deviceAddress = "E3:7E:29:1D:E8:5E"
 
     private val bluetoothGattCallback = object : BluetoothGattCallback() {
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
@@ -40,8 +41,7 @@ class MainActivity : AppCompatActivity() {
 
         override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
             val service = gatt.getService(UUID.fromString("6E400001-B5A3-F393-E0A9-E50E24DCCA9E"))
-            val characteristic =
-                service?.getCharacteristic(UUID.fromString("6E400003-B5A3-F393-E0A9-E50E24DCCA9E"))
+            val characteristic = service?.getCharacteristic(UUID.fromString("6E400003-B5A3-F393-E0A9-E50E24DCCA9E"))
             if (ActivityCompat.checkSelfPermission(
                     this@MainActivity,
                     Manifest.permission.BLUETOOTH_CONNECT
@@ -59,13 +59,9 @@ class MainActivity : AppCompatActivity() {
             gatt.setCharacteristicNotification(characteristic, true)
         }
 
-        override fun onCharacteristicChanged(
-            gatt: BluetoothGatt,
-            characteristic: BluetoothGattCharacteristic
-        ) {
+        override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
             val value = characteristic.getStringValue(0)
             runOnUiThread {
-                Log.d("ValueTag",value)
                 textView.text = value
             }
         }
@@ -93,11 +89,46 @@ class MainActivity : AppCompatActivity() {
                 ),
                 1
             )
+        } else {
+            connectToDevice()
         }
+    }
 
-        val device = bluetoothAdapter?.getRemoteDevice("E3:7E:29:1D:E8:5E")
+    private fun connectToDevice() {
+        val device = bluetoothAdapter?.getRemoteDevice(deviceAddress)
         device?.let {
+            if (ActivityCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.BLUETOOTH_CONNECT
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                // TODO: Consider calling
+                //    ActivityCompat#requestPermissions
+                // here to request the missing permissions, and then overriding
+                //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
+                //                                          int[] grantResults)
+                // to handle the case where the user grants the permission. See the documentation
+                // for ActivityCompat#requestPermissions for more details.
+                return
+            }
             bluetoothGatt = it.connectGatt(this, false, bluetoothGattCallback)
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == 1) {
+            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED &&
+                grantResults[1] == PackageManager.PERMISSION_GRANTED
+            ) {
+                connectToDevice()
+            } else {
+                // Handle the case where the user denied the required permissions
+            }
         }
     }
 
