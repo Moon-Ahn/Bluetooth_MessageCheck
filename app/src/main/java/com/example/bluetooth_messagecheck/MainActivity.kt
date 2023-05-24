@@ -1,7 +1,12 @@
 package com.example.bluetooth_messagecheck
 
 import android.Manifest
-import android.bluetooth.*
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothGatt
+import android.bluetooth.BluetoothGattCallback
+import android.bluetooth.BluetoothGattCharacteristic
+import android.bluetooth.BluetoothGattDescriptor
+import android.bluetooth.BluetoothProfile
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.util.Log
@@ -11,12 +16,12 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import java.util.UUID
 
+
 class MainActivity : AppCompatActivity() {
 
-private val bluetoothAdapter: BluetoothAdapter? by lazy { BluetoothAdapter.getDefaultAdapter() }
+    private val bluetoothAdapter: BluetoothAdapter? by lazy { BluetoothAdapter.getDefaultAdapter() }
     private lateinit var textView: TextView
     private lateinit var bluetoothGatt: BluetoothGatt
-    private val deviceAddress = "E3:7E:29:1D:E8:5E"
 
     private val bluetoothGattCallback = object : BluetoothGattCallback() {
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
@@ -26,13 +31,6 @@ private val bluetoothAdapter: BluetoothAdapter? by lazy { BluetoothAdapter.getDe
                         Manifest.permission.BLUETOOTH_CONNECT
                     ) != PackageManager.PERMISSION_GRANTED
                 ) {
-                    // TODO: Consider calling
-                    //    ActivityCompat#requestPermissions
-                    // here to request the missing permissions, and then overriding
-                    //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
-                    //                                          int[] grantResults)
-                    // to handle the case where the user grants the permission. See the documentation
-                    // for ActivityCompat#requestPermissions for more details.
                     return
                 }
                 gatt.discoverServices()
@@ -40,30 +38,72 @@ private val bluetoothAdapter: BluetoothAdapter? by lazy { BluetoothAdapter.getDe
         }
 
         override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
-            val service = gatt.getService(UUID.fromString("6E400001-B5A3-F393-E0A9-E50E24DCCA9E"))
-            val characteristic = service?.getCharacteristic(UUID.fromString("6E400003-B5A3-F393-E0A9-E50E24DCCA9E"))
+            val service = gatt.getService(UUID.fromString("6e400001-b5a3-f393-e0a9-e50e24dcca9e"))
+            val uuid = service.uuid
+            Log.d("BLUETOOTHGATT",uuid.toString())
+            val characteristic =
+                service?.getCharacteristic(UUID.fromString("6e400003-b5a3-f393-e0a9-e50e24dcca9e"))
             if (ActivityCompat.checkSelfPermission(
                     this@MainActivity,
                     Manifest.permission.BLUETOOTH_CONNECT
                 ) != PackageManager.PERMISSION_GRANTED
             ) {
-                // TODO: Consider calling
-                //    ActivityCompat#requestPermissions
-                // here to request the missing permissions, and then overriding
-                //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
-                //                                          int[] grantResults)
-                // to handle the case where the user grants the permission. See the documentation
-                // for ActivityCompat#requestPermissions for more details.
                 return
             }
-            gatt.setCharacteristicNotification(characteristic, true)
+            characteristic?.let {
+                val properties = characteristic.properties
+                if (properties and BluetoothGattCharacteristic.PROPERTY_NOTIFY != 0) {
+                    gatt.setCharacteristicNotification(characteristic, true)
+                    val descriptor = characteristic.getDescriptor(UUID.fromString("00002902-0000-1000-8000-00805f9b34fb"))
+                    descriptor?.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+                    gatt.writeDescriptor(descriptor)
+                } else if (properties and BluetoothGattCharacteristic.PROPERTY_INDICATE != 0) {
+                    gatt.setCharacteristicNotification(characteristic, true)
+                    val descriptor = characteristic.getDescriptor(UUID.fromString("00002902-0000-1000-8000-00805f9b34fb"))
+                    descriptor?.value = BluetoothGattDescriptor.ENABLE_INDICATION_VALUE
+                    gatt.writeDescriptor(descriptor)
+                } else {
+                    Log.d("UUIDSS","else!!")
+                }
+            }
         }
 
-        override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
+        override fun onCharacteristicChanged(
+            gatt: BluetoothGatt,
+            characteristic: BluetoothGattCharacteristic
+        ) {
+            //val value = characteristic.getStringValue(0)
             val value = characteristic.getStringValue(0)
             runOnUiThread {
+                Log.d("ValueTag",value)
                 textView.text = value
             }
+        }
+    }
+
+    private fun permissionscheck(){
+        if (ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.ACCESS_FINE_LOCATION
+            ) != PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.BLUETOOTH
+            ) != PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.BLUETOOTH_ADMIN
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.BLUETOOTH,
+                    Manifest.permission.BLUETOOTH_ADMIN
+                ),
+                1
+            )
         }
     }
 
@@ -71,6 +111,7 @@ private val bluetoothAdapter: BluetoothAdapter? by lazy { BluetoothAdapter.getDe
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         textView = findViewById(R.id.textView)
+        permissionscheck()
 
         if (ContextCompat.checkSelfPermission(
                 this,
@@ -89,46 +130,13 @@ private val bluetoothAdapter: BluetoothAdapter? by lazy { BluetoothAdapter.getDe
                 ),
                 1
             )
-        } else {
-            connectToDevice()
         }
-    }
 
-    private fun connectToDevice() {
-        val device = bluetoothAdapter?.getRemoteDevice(deviceAddress)
+        val device = bluetoothAdapter?.getRemoteDevice("E3:7E:29:1D:E8:5E")
+//        val pairedDevices = bluetoothAdapter?.bondedDevices
+//        val device = pairedDevices?.find { it.name == "RADAR_1D:E8:5E" }
         device?.let {
-            if (ActivityCompat.checkSelfPermission(
-                    this,
-                    Manifest.permission.BLUETOOTH_CONNECT
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
-                // TODO: Consider calling
-                //    ActivityCompat#requestPermissions
-                // here to request the missing permissions, and then overriding
-                //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
-                //                                          int[] grantResults)
-                // to handle the case where the user grants the permission. See the documentation
-                // for ActivityCompat#requestPermissions for more details.
-                return
-            }
             bluetoothGatt = it.connectGatt(this, false, bluetoothGattCallback)
-        }
-    }
-
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray
-    ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == 1) {
-            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED &&
-                grantResults[1] == PackageManager.PERMISSION_GRANTED
-            ) {
-                connectToDevice()
-            } else {
-                // Handle the case where the user denied the required permissions
-            }
         }
     }
 
@@ -139,13 +147,6 @@ private val bluetoothAdapter: BluetoothAdapter? by lazy { BluetoothAdapter.getDe
                 Manifest.permission.BLUETOOTH_CONNECT
             ) != PackageManager.PERMISSION_GRANTED
         ) {
-            // TODO: Consider calling
-            //    ActivityCompat#requestPermissions
-            // here to request the missing permissions, and then overriding
-            //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
-            //                                          int[] grantResults)
-            // to handle the case where the user grants the permission. See the documentation
-            // for ActivityCompat#requestPermissions for more details.
             return
         }
         bluetoothGatt.disconnect()
